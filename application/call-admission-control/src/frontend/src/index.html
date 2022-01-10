@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Cac Application - QoS</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" type="text/css" href="./ryu.topology.css">
+        <link
+            rel="stylesheet"
+            href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+            integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+            crossorigin="anonymous"
+        >
+    </head>
+    <!-- Latest compiled and minified CSS -->
+    <style type="text/css">
+        .header { 
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 70px;
+        }
+
+        .counter.col-md-4,
+        .concurrentComunication {
+            padding: 0;
+            margin: 0;
+        }
+
+
+        .counters,
+        .actions {
+            padding-left: 0;
+        }
+
+        .counter.col-md-4 {
+            padding-right: 5px;
+        }
+
+        .counter.col-md-4 label {
+            font-size: 12px;
+        }
+
+        .title {
+            font-weight: bold;
+            font-size: 17px;
+        }
+
+        #metrics-report {
+            border: 1px solid #000;
+            padding: 5px 10px;
+            height: 300px;
+            width: 100%;
+            font-size: 12px;
+            font-family: Arial;
+            font-weight: normal;
+            font-style: italic;
+            display: block;
+            overflow-y: scroll;
+        }
+        #trafficReport {
+            min-width: 310px;
+            max-width: 800px;
+            height: 400px;
+            margin: 0 auto
+        }
+    </style>
+    <body>
+        <div>
+            <div class="header">
+                <img src="./unsam_logo.jpg" style="width: 20%" />
+                <h1 style="width: 100%; margin-left: 100px">Mecanismos de calidad de servicio</h1>
+            </div>
+            <div style="clear: both" class="container">
+                <div class="col-md-12 charts">
+                    <section class="col-md-6 concurrentComunication">
+                        <h5 class="title">Comunicaciones Concurrentes</h5>
+                        <div class="col-md-12 counters">
+                            <div class="counter col-md-4">
+                                <label>Llamadas Concurrentes</label>
+                                <input id="total-channel-calls" type="text" class="form-control" value="0" />
+                            </div>
+                            <div class="counter col-md-4">
+                                <label>Llamadas Finalizadas (CAC)</label>
+                                <input id="cacThreshold" type="text" class="form-control" value="0" />
+                            </div>
+                            <div class="counter col-md-4">
+                                <label>Umbral CAC</label>
+                                <input type="text" class="form-control" value="2" />
+                            </div>
+                        </div>
+                        <div class="col-md-12 actions" style="margin: 20px 0;">
+                            <button class="btn btn-secondary" id="toggleCac">Toggle CAC</button>
+                            <button class="btn btn-secondary" id="toggleQos">Toggle QoS</button>
+                            <button class="btn btn-secondary" id="getTopologyLinks">Get Topology Links</button>
+                            <button class="btn btn-secondary" id="getTopologySwitches">Get Topology Switches</button>
+                        </div>
+                    </section>
+                    <section class="col-md-6 topologyVisualizer">
+                        <h5 class="title">Visualizador de Topologia</h5>
+                        <div class="topologyViewer" id="topologyViewer" />
+                    </section>
+                </div>
+                <div class="col-md-12">
+                    <div style="padding-left: 0; max-height: 400px; overflow-y: scroll" class="col-md-6">
+                        <table id="qos-status" class="table table-bordered stripped">
+                            <thead>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>QoS</th>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h5 class="title">Logs</h5>
+                        <div id="metrics-report" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    <script>
+        var ws = new WebSocket("ws://172.18.0.13:8000"); // cac-backend
+        const toggleCacButton = document.getElementById('toggleCac');
+        const toggleQosButton = document.getElementById('toggleQos');
+        const getTopologyLinks = document.getElementById('getTopologyLinks');
+        const getTopologySwitches = document.getElementById('getTopologySwitches');
+
+        const metricsContainer = document.getElementById('metrics-report');
+        const qosStatusTable = document.getElementById('qos-status');
+        const inputCalls = document.getElementById('total-channel-calls');
+        const inputcacThreshold = document.getElementById('cacThreshold');
+
+        toggleCacButton.addEventListener('click', e => {
+            sendMessage( 'toggleCac' )
+        });
+        toggleQosButton.addEventListener('click', e => {
+            sendMessage( 'toggleQos' )
+        });
+        getTopologyLinks.addEventListener('click', e => {
+            sendMessage( 'getTopologyLinks' )
+        });
+    
+        getTopologySwitches.addEventListener('click', e => {
+            sendMessage( 'getTopologySwitches' )
+        });
+
+        const newChannelFormatter = (newChannel) => {
+            const channelRow = qosStatusTable.insertRow(1);
+            const fromCell = channelRow.insertCell(0);
+            const toCell = channelRow.insertCell(1);
+            const QoSCell = channelRow.insertCell(2);
+            channelRow.setAttribute('id', newChannel.currentNewChannel[1][1].split("-")[1]);
+            fromCell.innerHTML = newChannel.currentNewChannel[1][1];
+            toCell.innerHTML = newChannel.currentNewChannel[7][1].exten;
+            QoSCell.innerHTML = "";
+        }
+
+        const totalChannelsFormater = (total) => {
+            inputCalls.value = total
+        }
+
+        const trafficSipRtpRender = (traffic) => {
+            // console.log(traffic.sip);
+            // console.log(traffic.rtp);
+        }
+
+        ws.onmessage = function (event) {
+            console.log(event.data);
+            if (event.data instanceof Blob) {
+                reader = new FileReader();
+                reader.addEventListener('loadend', (e) => {
+                    const text = e.target.result;
+                    try {
+                        // console.log('text', text);
+                        const jsonResponse = JSON.parse(text);
+                        // console.log('text', jsonResponse);
+                        if (jsonResponse.notificationType === "newChannel") {
+                            newChannelFormatter(jstonResponse.data);
+                        }
+                    } finally {
+                        const lastContent = metricsContainer.innerHTML;
+                        metricsContainer.innerHTML = lastContent + text;
+                    }
+                });
+                reader.readAsText(event.data);
+            } else {
+                const text = (event.data !== "Ping") ? JSON.parse(event.data) : event.data;
+                let lastContent = metricsContainer.innerHTML;
+                const jsonResponse = text;
+                if (jsonResponse.notificationType === "newChannel") {
+                    newChannelFormatter(jsonResponse.data);
+                    totalChannelsFormater(jsonResponse.data.totalChannels)
+                } else if (jsonResponse.notificationType === "closeChannel") {
+                    totalChannelsFormater(jsonResponse.data.totalChannels)
+                    console.log(jsonResponse.data.channelId[1][1].split('-')[1])
+                    document.getElementById(jsonResponse.data.channelId[1][1].split('-')[1]).remove()
+                    // console.log(jsonResponse.data) // ver channel id
+                } else if (jsonResponse.notificationType === "cacTrigger") {
+                    inputcacThreshold.value = Number(inputcacThreshold.value) + Number(jsonResponse.data.data)
+                } else if (jsonResponse.notificationType === "hostTraffic") {
+                    // trafficSipRtpRender(jsonResponse.data.hostTraffic)
+                } else if (jsonResponse.notificationType === "getTopologyLinks") {
+                    console.log(jsonResponse.data)
+                    // metricsContainer.innerHTML = lastContent + text;
+                } else if (jsonResponse.notificationType === "getTopologySwitches") {
+                    console.log(jsonResponse.data)
+                    // metricsContainer.innerHTML = lastContent + text;
+                }
+                metricsContainer.innerHTML = lastContent + event.data;
+            }
+        };
+
+        ws.onopen = function () {
+            sendMessage( 'Ping' )
+        };
+
+        sendMessage = function( command ) {
+            ws.send( command )
+        }
+
+        ws.onerror = function (error) {
+            console.log('WebSocket Error ', error);
+        };
+    </script>
+    <script src="./d3/d3.v3.min.js" charset="utf-8"></script>
+    <script src="./ryu.topology.js" charset="utf-8"></script>
+</html>
+
+
